@@ -32,6 +32,27 @@ class Scientists(Resource):
         scientists = [s.to_dict(only=('id', 'name', 'field_of_study')) for s in Scientist.query.all()]
         return scientists, 200
 
+    def post(self):
+        request_data = request.get_json()
+
+        errors = []
+        for field in ['name', 'field_of_study']:
+            if field not in request_data or not request_data[field]:
+                return {"errors": ["validation errors"]}, 400
+
+        scientist = Scientist(
+            name=request_data['name'],
+            field_of_study=request_data['field_of_study']
+        )
+
+        db.session.add(scientist)
+        db.session.commit()
+
+        response = scientist.to_dict(only=('id', 'name', 'field_of_study'))
+        response['missions'] = []
+
+        return response, 201
+
 class ScientistByID(Resource):
     def get(self, id):
         scientist = Scientist.query.filter_by(id=id).first()
@@ -62,6 +83,35 @@ class ScientistByID(Resource):
 
         return response_dict, 200
 
+    def patch(self, id):
+        scientist = Scientist.query.filter_by(id=id).first()
+        if not scientist:
+            return {"error": "Scientist not found"}, 404
+
+        request_data = request.get_json()
+
+        # Validate fields
+        if 'name' in request_data and not request_data['name']:
+            return {"errors": ["validation errors"]}, 400
+        if 'field_of_study' in request_data and not request_data['field_of_study']:
+            return {"errors": ["validation errors"]}, 400
+
+        # Update fields
+        if 'name' in request_data:
+            scientist.name = request_data['name']
+        if 'field_of_study' in request_data:
+            scientist.field_of_study = request_data['field_of_study']
+
+        db.session.commit()
+
+        response_dict = scientist.to_dict(only=('id', 'name', 'field_of_study'))
+        response_dict['missions'] = [m.to_dict(
+            only=('id', 'name', 'planet_id', 'scientist_id'),
+            include=('planet',)
+        ) for m in scientist.missions]
+
+        return response_dict, 202
+
     def delete(self, id):
         scientist = Scientist.query.filter(Scientist.id == id).first()
 
@@ -73,8 +123,41 @@ class ScientistByID(Resource):
 
         return '', 204
 
+class Planets(Resource):
+    def get(self):
+        planets = [p.to_dict(only=("id", "name", "distance_from_earth", "nearest_star")) for p in Planet.query.all()]
+        return planets, 200
+
+
+class Missions(Resource):
+    def post(self):
+        request_data = request.get_json()
+
+        errors = []
+        for field in ['name', 'scientist_id', 'planet_id']:
+            if field not in request_data or not request_data[field]:
+                return {"errors": ["validation errors"]}, 400
+
+        mission = Mission (
+            name=request_data['name'],
+            scientist_id=request_data['scientist_id'],
+            planet_id=request_data['planet_id']
+        )
+        
+        db.session.add(mission)
+        db.session.commit()
+
+        response = mission.to_dict(only=("id", "name", "planet_id", "scientist_id"))
+        
+        response['scientist'] = mission.scientist.to_dict(only=('id', 'name', 'field_of_study'))
+        response['planet'] = mission.planet.to_dict(only=('id', 'name', 'distance_from_earth', 'nearest_star'))
+
+        return response, 201
+
 api.add_resource(Scientists, '/scientists')
 api.add_resource(ScientistByID, '/scientists/<int:id>')
+api.add_resource(Planets, '/planets')
+api.add_resource(Missions, '/missions')
 
 if __name__ == '__main__':
     app.run(port=5555, debug=True)
