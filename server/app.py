@@ -62,6 +62,17 @@ class ScientistByID(Resource):
 
         return response_dict, 200
 
+    def delete(self, id):
+        scientist = Scientist.query.filter(Scientist.id == id).first()
+
+        if not scientist:
+            return {"error": "Scientist not found"}, 404
+        
+        db.session.delete(scientist)
+        db.session.commit()
+
+        return '', 204
+
 api.add_resource(Scientists, '/scientists')
 api.add_resource(ScientistByID, '/scientists/<int:id>')
 
